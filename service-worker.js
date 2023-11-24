@@ -1,57 +1,52 @@
-// Версия кэша
-const CACHE_NAME = 'news-pwa-cache-v1';
-// URL-адреса для кэширования
+const CACHE_NAME = 'ai-news-cache-v1';
 const urlsToCache = [
     '/',
     '/index.html',
+    '/main.js',
     '/styles.css',
-    '/script.js',
-    '/favicon.ico'
+    '/icons/icon-192x192.png',
+    '/icons/icon-512x512.png',
+    '/manifest.json'
 ];
+let latestArticleId = 0;
 
-// Установка сервис-воркера и кэширование ресурсов
-self.addEventListener('install', event => {
+self.addEventListener('install', function(event) {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => {
-                console.log('Opened cache');
-                return cache.addAll(urlsToCache);
-            })
+        caches.open(CACHE_NAME).then(function(cache) {
+            console.log('Opened cache');
+            return cache.addAll(urlsToCache);
+        })
     );
 });
 
-// Ответ из кэша или загрузка свежих данных
-// Обработчик fetch, который всегда загружает свежие данные из сети
-self.addEventListener('fetch', event => {
-    event.respondWith(
-        fetch(event.request)
-            .then(fetchResponse => {
-                // Если запрос выполнен успешно, копируем ответ в кеш и возвращаем его
-                const responseClone = fetchResponse.clone();
-                caches.open(CACHE_NAME).then(cache => {
-                    cache.put(event.request, responseClone);
+self.addEventListener('fetch', function(event) {
+    if (event.request.url.includes('/api/news')) {
+        event.respondWith(
+            fetch(event.request).then(function(response) {
+                return caches.open(CACHE_NAME).then(function(cache) {
+                    cache.put(event.request.url, response.clone());
+                    return response;
                 });
-                return fetchResponse;
+            }).catch(function() {
+                return caches.match(event.request);
             })
-            .catch(() => {
-                // Если сетевой запрос не удался, пытаемся вернуть данные из кеша
-                return caches.match(event.request).then(response => {
-                    if (response) return response;
-
-                    // Если в кеше нет подходящего ответа, можно вернуть запасной контент
-                    // Например, это может быть страница "offline.html"
-                    return caches.match('/offline.html');
-                });
+        );
+    } else {
+        event.respondWith(
+            caches.match(event.request).then(function(response) {
+                return response || fetch(event.request);
             })
-    );
+        );
+    }
 });
-// Активация Service Worker и очистка старого кэша
-self.addEventListener('activate', event => {
-    const cacheWhitelist = [CACHE_NAME];
+
+self.addEventListener('activate', function(event) {
+    var cacheWhitelist = [CACHE_NAME];
+
     event.waitUntil(
-        caches.keys().then(cacheNames => {
+        caches.keys().then(function(cacheNames) {
             return Promise.all(
-                cacheNames.map(cacheName => {
+                cacheNames.map(function(cacheName) {
                     if (cacheWhitelist.indexOf(cacheName) === -1) {
                         return caches.delete(cacheName);
                     }
@@ -59,33 +54,50 @@ self.addEventListener('activate', event => {
             );
         })
     );
+
+    self.clients.claim();
+
+    event.waitUntil(
+        checkForNewArticles()
+    );
 });
 
-// Обработка фонового синхронизации
-self.addEventListener('sync', event => {
-    if (event.tag === 'news-fetch') {
-        event.waitUntil(fetchAndCacheNews());
+self.addEventListener('sync', function(event) {
+    if (event.tag === 'update-news') {
+        event.waitUntil(checkForNewArticles());
     }
 });
 
-// Функция для получения и кэширования новостей
-async function fetchAndCacheNews() {
-    const response = await fetch('/api/news');
-    if (response.ok) {
+self.addEventListener('notificationclick', function(event) {
+    // Пример простой обработки клика на уведомление
+    event.notification.close();
+    event.waitUntil(clients.openWindow('/'));
+});
+
+function showMessage(title) {
+    self.registration.showNotification('New Article!', {
+        body: title,
+        icon: '/icons/icon-192x192.png'
+    });
+}
+
+async function checkForNewArticles() {
+    try {
+        const response = await fetch('/api/news');
         const newsData = await response.json();
-        const cache = await caches.open(CACHE_NAME);
-        await cache.put('/api/news', new Response(JSON.stringify(newsData)));
+        const newArticles = newsData.items;
+        const newLatestArticleId = Math.max(...newArticles.map(article => article.id));
+
+        if (newLatestArticleId > latestArticleId) {
+            latestArticleId = newLatestArticleId;
+            showMessage(newArticles[0].title);
+        }
+    } catch (error) {
+        // В продакшене добавить обработку случаев, когда клиент не может связаться с сервером
+        console.error('Error checking for new articles:', error);
     }
 }
 
-// Отслеживаем push уведомления
-self.addEventListener('push', event => {
-    const data = event.data.json();
-    const title = 'New Article: ' + data.title;
-    const options = {
-        body: 'Tap to open the article.',
-        icon: 'images/icon.png',
-        badge: 'images/badge.png'
-    };
-    event.waitUntil(self.registration.showNotification(title, options));
-});
+setInterval(() => {
+    self.registration.sync.register('update-news');
+}, 10000);
