@@ -49,11 +49,14 @@ self.addEventListener('fetch', event => {
 
 // Обработка сообщений от основного потока
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'get-cached-news') {
-    serveCachedNews(event);
-      navigator.serviceWorker.controller.postMessage({ type: 'get-cached-news' })
-  }
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.active.postMessage({ type: 'get-cached-news' });
+        });
+    }
+
 });
+
 
 
 
