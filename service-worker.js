@@ -1,5 +1,6 @@
 const CACHE_NAME = 'ai-news-cache-v1';
-const STATIC_CACHE_URLS = [
+const DATA_CACHE_NAME = 'ai-news-data-cache-v1';
+const URLS_TO_CACHE = [
     '/',
     '/index.html',
     '/style.css',
@@ -13,7 +14,7 @@ self.addEventListener('install', event => {
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Открыт кеш:', cache);
-                return cache.addAll(STATIC_CACHE_URLS);
+                return cache.addAll(URLS_TO_CACHE);
             })
     );
 });
@@ -22,7 +23,7 @@ self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
             return Promise.all(
-                cacheNames.filter(cacheName => cacheName !== CACHE_NAME)
+                cacheNames.filter(cacheName => cacheName !== CACHE_NAME && cacheName !== DATA_CACHE_NAME)
                     .map(cacheName => caches.delete(cacheName))
             );
         })
@@ -30,27 +31,41 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                return response || fetch(event.request).then(fetchResponse => {
-                    if (event.request.url.startsWith('/api/news')) {
-                        return caches.open(CACHE_NAME).then(cache => {
-                            cache.put(event.request, fetchResponse.clone());
-                            return fetchResponse;
+    const { request } = event;
+
+    // Если запрос к API, сохраняем данные в отдельный кеш
+    if (request.url.includes('/api/')) {
+        event.respondWith(
+            caches.open(DATA_CACHE_NAME)
+                .then(cache => {
+                    return fetch(request)
+                        .then(response => {
+                            // Проверяем, успешный ли запрос
+                            if (response.status === 200) {
+                                cache.put(request, response.clone());
+                            }
+                            return response;
+                        })
+                        .catch(error => {
+                            // Если запрос не удался, возвращаем данные из кеша
+                            return cache.match(request);
                         });
-                    } else {
-                        return fetchResponse;
-                    }
-                });
-            })
-    );
+                })
+        );
+    } else {
+        // Если запрос к статическим ресурсам, возвращаем из основного кеша
+        event.respondWith(
+            caches.match(request)
+                .then(response => {
+                    return response || fetch(request);
+                })
+        );
+    }
 });
 
 self.addEventListener('message', event => {
     if (event.data && event.data.type === 'get-cached-news') {
         serveCachedNews(event);
-        navigator.serviceWorker.controller.postMessage({ type: 'get-cached-news' });
     }
 });
 
