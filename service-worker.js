@@ -1,5 +1,4 @@
-const CACHE_NAME = 'ai-news-cache-v1';
-const DATA_CACHE_NAME = 'ai-news-data-cache-v1';
+const CACHE_NAME = 'ai-news-cache-v12';
 const URLS_TO_CACHE = [
     '/',
     '/index.html',
@@ -9,6 +8,7 @@ const URLS_TO_CACHE = [
     '/icons/icon-512x512.png'
 ];
 
+// Установка Service Worker и кеширование ресурсов
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
@@ -19,64 +19,60 @@ self.addEventListener('install', event => {
     );
 });
 
+// Активация Service Worker и очистка старого кеша
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
             return Promise.all(
-                cacheNames.filter(cacheName => cacheName !== CACHE_NAME && cacheName !== DATA_CACHE_NAME)
+                cacheNames.filter(cacheName => cacheName !== CACHE_NAME)
                     .map(cacheName => caches.delete(cacheName))
             );
         })
     );
 });
 
+// Перехват сетевых запросов
 self.addEventListener('fetch', event => {
-    const { request } = event;
-
-    // Попытка получить данные из кеша
     event.respondWith(
-        caches.match(request)
+        caches.match(event.request)
             .then(response => {
+                // Возвращает кешированный ответ, если он есть
                 if (response) {
                     return response;
                 }
 
-                // Если данных нет в кеше, делаем сетевой запрос
-                return fetch(request)
-                    .then(fetchResponse => {
-                        // Проверяем, успешный ли запрос
-                        if (!fetchResponse || fetchResponse.status !== 200) {
-                            // Если запрос не удался, пытаемся получить данные из кеша
-                            return caches.match(request);
-                        }
+                // Если интернет-соединение отсутствует, возвращает null
+                if (!navigator.onLine) {
+                    return null;
+                }
 
-                        // Если запрос к API, сохраняем данные в отдельный кеш
-                        if (request.url.includes('/api/')) {
-                            const responseToCache = fetchResponse.clone();
-                            caches.open(DATA_CACHE_NAME)
-                                .then(cache => {
-                                    cache.put(request, responseToCache);
-                                });
-                        }
-
+                // В противном случае выполняет запрос к сети и кеширует ответ
+                return fetch(event.request).then(fetchResponse => {
+                    if (!fetchResponse || fetchResponse.status !== 200) {
                         return fetchResponse;
-                    })
-                    .catch(error => {
-                        // Если запрос не удался, пытаемся получить данные из кеша
-                        return caches.match(request);
+                    }
+
+                    const responseToCache = fetchResponse.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(event.request, responseToCache);
                     });
+
+                    return fetchResponse;
+                });
             })
     );
 });
 
+// Обработка сообщений от основного потока
 self.addEventListener('message', event => {
     if (event.data && event.data.type === 'get-cached-news') {
         serveCachedNews(event);
     }
 });
 
+// Функция для предоставления кешированных новостей
 function serveCachedNews(event) {
-    const newsApiUrl = '/api/news';
+    const newsApiUrl = '/api/news'; // URL API для новостей
     caches.match(newsApiUrl)
         .then(response => {
             if (response) {
@@ -92,4 +88,20 @@ function serveCachedNews(event) {
             }
         })
         .catch(error => console.error('Ошибка при получении кешированных новостей:', error));
+}
+
+// Загрузка новостей из кеша
+function loadFromCache() {
+    if (!navigator.serviceWorker) {
+        console.log('Service Worker не поддерживается этим браузером.');
+        return;
+    }
+
+    navigator.serviceWorker.controller.postMessage({ type: 'get-cached-news' });
+
+    navigator.serviceWorker.onmessage = event => {
+        if (event.data.type === 'cached-news' && event.data.articles) {
+            updateNewsList(event.data.articles);
+        }
+    };
 }
