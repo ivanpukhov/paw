@@ -21,22 +21,23 @@ self.addEventListener('install', event => {
 });
 
 // Ответ из кэша или загрузка свежих данных
+// Обработчик fetch, который всегда загружает свежие данные из сети
 self.addEventListener('fetch', event => {
     event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                // Возвращаем ответ из кэша или загружаем из сети
-                return response || fetch(event.request).then(fetchResponse => {
-                    return caches.open(CACHE_NAME).then(cache => {
-                        cache.put(event.request, fetchResponse.clone());
-                        return fetchResponse;
-                    });
+        fetch(event.request)
+            .catch(() => {
+                // Если запрос не удался, попробуем получить данные из кеша
+                return caches.match(event.request).then(response => {
+                    if (response) {
+                        return response;
+                    } else {
+                        // Здесь можно вставить логику для возвращения запасной страницы (например, оффлайн-страницы)
+                        // Важно иметь запасной план на случай полного отсутствия интернета и отсутствия кешированных данных
+                    }
                 });
             })
-            .catch(() => caches.match('/offline.html')) // Показать оффлайн страницу, если нет сети
     );
 });
-
 // Активация Service Worker и очистка старого кэша
 self.addEventListener('activate', event => {
     const cacheWhitelist = [CACHE_NAME];
