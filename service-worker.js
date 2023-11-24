@@ -62,11 +62,11 @@ self.addEventListener('sync', event => {
 
 // Функция для получения и кэширования новостей
 async function fetchAndCacheNews() {
-    const response = await fetch('https://ix-web.site/api/news');
+    const response = await fetch('/api/news');
     if (response.ok) {
         const newsData = await response.json();
         const cache = await caches.open(CACHE_NAME);
-        await cache.put('https://ix-web.site/api/news', new Response(JSON.stringify(newsData)));
+        await cache.put('/api/news', new Response(JSON.stringify(newsData)));
     }
 }
 

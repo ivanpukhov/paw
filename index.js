@@ -19,7 +19,7 @@ function checkForNewArticle(items) {
 
 // Запрос новостей с сервера или из кеша
 function fetchNews() {
-	fetch('https://ix-web.site/api/news')
+	fetch('/api/news')
 		.then(response => {
 			if (response.ok) return response.json();
 			throw new Error('Network response was not ok.');
@@ -33,7 +33,7 @@ function fetchNews() {
 		.catch(error => {
 			// Обработка случая, когда нет доступа к сети
 			console.log('Fetch failed, trying to retrieve from cache: ', error);
-			caches.match('https://ix-web.site/api/news').then(response => {
+			caches.match('/api/news').then(response => {
 				if (!response) throw new Error('No cached data');
 				return response.json();
 			})
