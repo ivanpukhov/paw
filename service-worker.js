@@ -46,7 +46,8 @@ self.addEventListener('fetch', event => {
                     .then(fetchResponse => {
                         // Проверяем, успешный ли запрос
                         if (!fetchResponse || fetchResponse.status !== 200) {
-                            return fetchResponse;
+                            // Если запрос не удался, пытаемся получить данные из кеша
+                            return caches.match(request);
                         }
 
                         // Если запрос к API, сохраняем данные в отдельный кеш
@@ -61,11 +62,8 @@ self.addEventListener('fetch', event => {
                         return fetchResponse;
                     })
                     .catch(error => {
-                        // Если запрос не удался, и данных в кеше нет, возвращаем ошибку
-                        if (!response) {
-                            throw error;
-                        }
-                        return response;
+                        // Если запрос не удался, пытаемся получить данные из кеша
+                        return caches.match(request);
                     });
             })
     );
