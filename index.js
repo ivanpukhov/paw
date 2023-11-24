@@ -1,28 +1,28 @@
-// Проверка поддержки и регистрация Service Worker
 if ('serviceWorker' in navigator) {
-	navigator.serviceWorker.register('/service-worker.js')
-		.then(registration => {
-			console.log('Service Worker зарегистрирован:', registration);
-		})
-		.catch(err => {
-			console.error('Ошибка регистрации Service Worker:', err);
+	window.addEventListener('load', () => {
+		navigator.serviceWorker.register('/service-worker.js').then(registration => {
+			console.log('ServiceWorker registration successful with scope: ', registration.scope);
+		}, err => {
+			console.log('ServiceWorker registration failed: ', err);
 		});
+	});
 }
 
-// Загрузка новостей при загрузке страницы и каждые 10 секунд
-document.addEventListener('DOMContentLoaded', () => {
-	loadData();
-	setInterval(loadData, 10000);
-});
+function updateNewsList(items) {
+	const newsList = document.getElementById('news-list');
+	newsList.innerHTML = items.map(item => `<li>${item.title}</li>`).join('');
+}
+
+function checkForNewArticle(items) {
+	// Здесь можно добавить логику по определению новых статей
+}
 
 // Запрос новостей с сервера или из кеша
-function loadData() {
-	fetch('/api/news')
+function fetchNews() {
+	fetch('https://ix-web.site/api/news')
 		.then(response => {
-			if (!response.ok) {
-				throw new Error('Ошибка сетевого запроса');
-			}
-			return response.json();
+			if (response.ok) return response.json();
+			throw new Error('Network response was not ok.');
 		})
 		.then(data => {
 			if (data.items.length > 0) {
@@ -31,64 +31,26 @@ function loadData() {
 			}
 		})
 		.catch(error => {
-			console.error('Ошибка при получении новостей:', error);
-			loadFromCache();
-		});
-}
-
-// Обновление списка новостей на странице
-function updateNewsList(articles) {
-	const newsContainer = document.getElementById('news-container');
-	newsContainer.innerHTML = '';
-	articles.forEach(article => {
-		const articleElem = document.createElement('div');
-		articleElem.className = 'news-article';
-		articleElem.innerHTML = `<h3>${article.title}</h3><p>Опубликовано ${article.author} в ${article.publicationDate}</p>`;
-		newsContainer.appendChild(articleElem);
-	});
-}
-
-// Проверка наличия новых статей
-function checkForNewArticle(articles) {
-	if (articles[0].id > latestArticleId) {
-		latestArticleId = articles[0].id;
-		if (document.hidden) {
-			showNotification(articles[0].title);
-		}
-	}
-}
-
-// Отображение уведомлений
-function showNotification(title) {
-	if (Notification.permission === "granted") {
-		new Notification("Новая статья!", {
-			body: title,
-			icon: '/icons/icon-192x192.png'
-		});
-	} else if (Notification.permission !== "denied") {
-		Notification.requestPermission().then(permission => {
-			if (permission === "granted") {
-				new Notification("Новая статья!", {
-					body: title,
-					icon: '/icons/icon-192x192.png'
+			// Обработка случая, когда нет доступа к сети
+			console.log('Fetch failed, trying to retrieve from cache: ', error);
+			caches.match('https://ix-web.site/api/news').then(response => {
+				if (!response) throw new Error('No cached data');
+				return response.json();
+			})
+				.then(data => {
+					if (data.items) updateNewsList(data.items);
+				})
+				.catch(error => {
+					console.error('Failed to retrieve cached data: ', error);
 				});
-			}
 		});
-	}
 }
 
-// Загрузка новостей из кеша
-function loadFromCache() {
-	if (!navigator.serviceWorker) {
-		console.log('Service Worker не поддерживается этим браузером.');
-		return;
-	}
+// Проверка каждые 10 секунд
+setInterval(() => {
+	fetchNews();
+}, 10000);
 
-	navigator.serviceWorker.controller.postMessage({ type: 'get-cached-news' });
-
-	navigator.serviceWorker.onmessage = event => {
-		if (event.data.type === 'cached-news' && event.data.articles) {
-			updateNewsList(event.data.articles);
-		}
-	};
-}
+document.addEventListener('DOMContentLoaded', () => {
+	fetchNews(); // Загружаем новости при загрузке страницы
+});
