@@ -19,10 +19,13 @@ function checkForNewArticle(items) {
 
 // Запрос новостей с сервера или из кеша
 function fetchNews() {
-	fetch('/api/news')
+	fetch('/api/news', { headers: { 'Cache-Control': 'no-cache' } })
 		.then(response => {
-			if (response.ok) return response.json();
-			throw new Error('Network response was not ok.');
+			if (response.status === 200) {
+				return response.json();
+			} else {
+				throw new Error('Network response was not ok.');
+			}
 		})
 		.then(data => {
 			if (data.items.length > 0) {
@@ -31,7 +34,6 @@ function fetchNews() {
 			}
 		})
 		.catch(error => {
-			// Обработка случая, когда нет доступа к сети
 			console.log('Fetch failed, trying to retrieve from cache: ', error);
 			caches.match('/api/news').then(response => {
 				if (!response) throw new Error('No cached data');
@@ -45,7 +47,6 @@ function fetchNews() {
 				});
 		});
 }
-
 // Проверка каждые 10 секунд
 setInterval(() => {
 	fetchNews();
