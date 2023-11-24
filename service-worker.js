@@ -33,34 +33,42 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const { request } = event;
 
-    // Если запрос к API, сохраняем данные в отдельный кеш
-    if (request.url.includes('/api/')) {
-        event.respondWith(
-            caches.open(DATA_CACHE_NAME)
-                .then(cache => {
-                    return fetch(request)
-                        .then(response => {
-                            // Проверяем, успешный ли запрос
-                            if (response.status === 200) {
-                                cache.put(request, response.clone());
-                            }
-                            return response;
-                        })
-                        .catch(error => {
-                            // Если запрос не удался, возвращаем данные из кеша
-                            return cache.match(request);
-                        });
-                })
-        );
-    } else {
-        // Если запрос к статическим ресурсам, возвращаем из основного кеша
-        event.respondWith(
-            caches.match(request)
-                .then(response => {
-                    return response || fetch(request);
-                })
-        );
-    }
+    // Попытка получить данные из кеша
+    event.respondWith(
+        caches.match(request)
+            .then(response => {
+                if (response) {
+                    return response;
+                }
+
+                // Если данных нет в кеше, делаем сетевой запрос
+                return fetch(request)
+                    .then(fetchResponse => {
+                        // Проверяем, успешный ли запрос
+                        if (!fetchResponse || fetchResponse.status !== 200) {
+                            return fetchResponse;
+                        }
+
+                        // Если запрос к API, сохраняем данные в отдельный кеш
+                        if (request.url.includes('/api/')) {
+                            const responseToCache = fetchResponse.clone();
+                            caches.open(DATA_CACHE_NAME)
+                                .then(cache => {
+                                    cache.put(request, responseToCache);
+                                });
+                        }
+
+                        return fetchResponse;
+                    })
+                    .catch(error => {
+                        // Если запрос не удался, и данных в кеше нет, возвращаем ошибку
+                        if (!response) {
+                            throw error;
+                        }
+                        return response;
+                    });
+            })
+    );
 });
 
 self.addEventListener('message', event => {
