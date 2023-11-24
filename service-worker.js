@@ -25,15 +25,22 @@ self.addEventListener('install', event => {
 self.addEventListener('fetch', event => {
     event.respondWith(
         fetch(event.request)
+            .then(fetchResponse => {
+                // Если запрос выполнен успешно, копируем ответ в кеш и возвращаем его
+                const responseClone = fetchResponse.clone();
+                caches.open(CACHE_NAME).then(cache => {
+                    cache.put(event.request, responseClone);
+                });
+                return fetchResponse;
+            })
             .catch(() => {
-                // Если запрос не удался, попробуем получить данные из кеша
+                // Если сетевой запрос не удался, пытаемся вернуть данные из кеша
                 return caches.match(event.request).then(response => {
-                    if (response) {
-                        return response;
-                    } else {
-                        // Здесь можно вставить логику для возвращения запасной страницы (например, оффлайн-страницы)
-                        // Важно иметь запасной план на случай полного отсутствия интернета и отсутствия кешированных данных
-                    }
+                    if (response) return response;
+
+                    // Если в кеше нет подходящего ответа, можно вернуть запасной контент
+                    // Например, это может быть страница "offline.html"
+                    return caches.match('/offline.html');
                 });
             })
     );
