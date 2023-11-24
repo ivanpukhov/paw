@@ -19,7 +19,7 @@ if ('serviceWorker' in navigator) {
 
   // Запрос новостей с сервера или из кеша
   function loadData() {
-	fetch('https://192.168.1.65:3000/api/news')
+	fetch('/api/news')
 	  .then(response => {
 		if (!response.ok) {
 		  throw new Error('Ошибка сетевого запроса');
